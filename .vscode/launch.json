@@ -50,6 +50,49 @@
             "env": {
                 "PYTHONUNBUFFERED": "1"
             }
+        },
+        {
+            "name": "Export X3D to ONNX",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/export_onnx_final.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "configs/Custom/X3D_M_custom.yaml",
+                "--checkpoint",
+                "output/custom_x3d_3/checkpoints/checkpoint_epoch_00150.pyth",
+                "--output",
+                "output/custom_x3d_3/model.onnx",
+                "--export_softmax",
+                "--simplify",
+                "--test_frames",
+                "mmaction2/110_video_frames_200_test2/bird/Smart_Record_00049_20251113-032810_68600_1",
+                "--class_names", "鸟,无人机"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "ONNX Inference (X3D ONNX)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/onnx_inference.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--onnx_model",
+                "output/custom_x3d_3/model_softmax.onnx",
+                "--input_folder",
+                "mmaction2/110_video_frames_200_test2/bird/Smart_Record_00049_20251113-032810_68600_1",
+                "--cfg",
+                "configs/Custom/X3D_M_custom.yaml"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
         }
     ]
 }

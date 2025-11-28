@@ -103,34 +103,62 @@ def simplify_onnx_model(input_path, output_path):
         return False
 
 
-def load_video_frames(video_path, num_frames, target_size):
-    """Load frames from video file."""
+def load_video_frames(video_path, num_frames, sampling_rate, target_size):
+    """Load frames from video file with SlowFast standard sampling."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Cannot open video: {video_path}")
     
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_indices = np.linspace(0, max(total_frames - 1, 0), num_frames, dtype=int)
+    clip_length = num_frames * sampling_rate
+    
+    # Temporal sampling (Center crop in time)
+    start_frame = 0
+    if total_frames > clip_length:
+        start_frame = (total_frames - clip_length) // 2
     
     frames = []
-    for idx in frame_indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+    for i in range(num_frames):
+        frame_idx = start_frame + i * sampling_rate
+        # Loop padding if not enough frames
+        if frame_idx >= total_frames:
+            frame_idx = frame_idx % total_frames
+            
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = cap.read()
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, (target_size, target_size))
+            
+            # Spatial preprocessing (Resize short side + Center Crop)
+            h, w, _ = frame.shape
+            if h < w:
+                new_h = target_size
+                new_w = int(w * target_size / h)
+            else:
+                new_w = target_size
+                new_h = int(h * target_size / w)
+            
+            frame = cv2.resize(frame, (new_w, new_h))
+            
+            # Center crop
+            start_x = (new_w - target_size) // 2
+            start_y = (new_h - target_size) // 2
+            frame = frame[start_y:start_y+target_size, start_x:start_x+target_size]
+            
             frames.append(frame)
+        else:
+            # Handle read failure
+            if frames:
+                frames.append(frames[-1])
+            else:
+                frames.append(np.zeros((target_size, target_size, 3), dtype=np.uint8))
     
     cap.release()
-    
-    while len(frames) < num_frames:
-        frames.append(frames[-1] if frames else np.zeros((target_size, target_size, 3), dtype=np.uint8))
-    
-    return np.array(frames[:num_frames])
+    return np.array(frames)
 
 
-def load_frames_from_directory(frames_dir, num_frames, target_size):
-    """Load frames from directory."""
+def load_frames_from_directory(frames_dir, num_frames, sampling_rate, target_size):
+    """Load frames from directory with SlowFast standard sampling."""
     frame_dir = Path(frames_dir)
     image_files = sorted([
         f for f in frame_dir.iterdir()
@@ -140,30 +168,64 @@ def load_frames_from_directory(frames_dir, num_frames, target_size):
     if not image_files:
         raise ValueError(f"No image files found in: {frames_dir}")
     
-    total_files = len(image_files)
-    frame_indices = np.linspace(0, total_files - 1, num_frames, dtype=int)
+    total_frames = len(image_files)
+    clip_length = num_frames * sampling_rate
+    
+    # Temporal sampling (Center crop in time)
+    start_frame = 0
+    if total_frames > clip_length:
+        start_frame = (total_frames - clip_length) // 2
     
     frames = []
-    for idx in frame_indices:
-        frame = cv2.imread(str(image_files[idx]))
+    for i in range(num_frames):
+        frame_idx = start_frame + i * sampling_rate
+        # Loop padding if not enough frames
+        if frame_idx >= total_frames:
+            frame_idx = frame_idx % total_frames
+            
+        frame = cv2.imread(str(image_files[frame_idx]))
         if frame is not None:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, (target_size, target_size))
+            
+            # Spatial preprocessing (Resize short side + Center Crop)
+            h, w, _ = frame.shape
+            if h < w:
+                new_h = target_size
+                new_w = int(w * target_size / h)
+            else:
+                new_w = target_size
+                new_h = int(h * target_size / w)
+            
+            frame = cv2.resize(frame, (new_w, new_h))
+            
+            # Center crop
+            start_x = (new_w - target_size) // 2
+            start_y = (new_h - target_size) // 2
+            frame = frame[start_y:start_y+target_size, start_x:start_x+target_size]
+            
             frames.append(frame)
+        else:
+             # Handle read failure
+            if frames:
+                frames.append(frames[-1])
+            else:
+                frames.append(np.zeros((target_size, target_size, 3), dtype=np.uint8))
     
-    while len(frames) < num_frames:
-        frames.append(frames[-1] if frames else np.zeros((target_size, target_size, 3), dtype=np.uint8))
-    
-    return np.array(frames[:num_frames])
+    return np.array(frames)
 
 
-def preprocess_frames(frames):
+def preprocess_frames(frames, cfg):
     """
-    Preprocess frames for model input.
+    Preprocess frames for model input with Mean/Std normalization.
     frames: (T, H, W, C) uint8 [0, 255]
     returns: (1, C, T, H, W) float32
     """
+    mean = np.array(cfg.DATA.MEAN, dtype=np.float32)
+    std = np.array(cfg.DATA.STD, dtype=np.float32)
+    
     frames = frames.astype(np.float32) / 255.0
+    frames = (frames - mean) / std
+    
     # Transpose to (C, T, H, W) and add batch dim
     frames = np.transpose(frames, (3, 0, 1, 2))
     frames = np.expand_dims(frames, axis=0)
@@ -179,17 +241,18 @@ def test_with_real_data(pytorch_model, onnx_path, test_path, is_video, cfg, clas
     print(f"Type: {'Video file' if is_video else 'Frames directory'}")
     
     num_frames = cfg.DATA.NUM_FRAMES
+    sampling_rate = cfg.DATA.SAMPLING_RATE
     crop_size = cfg.DATA.TEST_CROP_SIZE
     
     # Load frames
     print(f"\nLoading {num_frames} frames (size: {crop_size}x{crop_size})...")
     if is_video:
-        frames = load_video_frames(test_path, num_frames, crop_size)
+        frames = load_video_frames(test_path, num_frames, sampling_rate, crop_size)
     else:
-        frames = load_frames_from_directory(test_path, num_frames, crop_size)
+        frames = load_frames_from_directory(test_path, num_frames, sampling_rate, crop_size)
     
     print(f"Loaded: {frames.shape}")
-    input_tensor = preprocess_frames(frames)
+    input_tensor = preprocess_frames(frames, cfg)
     print(f"Preprocessed: {input_tensor.shape}")
     
     # PyTorch inference
