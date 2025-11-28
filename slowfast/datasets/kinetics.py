@@ -3,6 +3,7 @@
 
 import os
 import random
+from PIL import Image
 
 import numpy as np
 import pandas
@@ -260,11 +261,15 @@ class Kinetics(torch.utils.data.Dataset):
         for i_try in range(self._num_retries):
             video_container = None
             try:
-                video_container = container.get_video_container(
-                    self._path_to_videos[index],
-                    self.cfg.DATA_LOADER.ENABLE_MULTI_THREAD_DECODE,
-                    self.cfg.DATA.DECODING_BACKEND,
-                )
+                # 支持目录帧读取：如果路径是目录则直接读取图片序列而非视频文件
+                if os.path.isdir(self._path_to_videos[index]):
+                    video_container = None  # 帧目录模式，不创建容器
+                else:
+                    video_container = container.get_video_container(
+                        self._path_to_videos[index],
+                        self.cfg.DATA_LOADER.ENABLE_MULTI_THREAD_DECODE,
+                        self.cfg.DATA.DECODING_BACKEND,
+                    )
             except Exception as e:
                 logger.info(
                     "Failed to load video from {} with error {}".format(
@@ -275,14 +280,14 @@ class Kinetics(torch.utils.data.Dataset):
                     # let's try another one
                     index = random.randint(0, len(self._path_to_videos) - 1)
                 continue  # Select a random video if the current video was not able to access.
-            if video_container is None:
+            # 如果是目录模式，不再进行 video_container 判空重试；否则保持原行为
+            if video_container is None and not os.path.isdir(self._path_to_videos[index]):
                 logger.warning(
                     "Failed to meta load video idx {} from {}; trial {}".format(
                         index, self._path_to_videos[index], i_try
                     )
                 )
                 if self.mode not in ["test"] and i_try > self._num_retries // 8:
-                    # let's try another one
                     index = random.randint(0, len(self._path_to_videos) - 1)
                 continue
 
@@ -318,26 +323,36 @@ class Kinetics(torch.utils.data.Dataset):
                 target_fps += random.uniform(0.0, self.cfg.DATA.TRAIN_JITTER_FPS)
 
             # Decode video. Meta info is used to perform selective decoding.
-            frames, time_idx, tdiff = decoder.decode(
-                video_container,
-                sampling_rate,
-                num_frames,
-                temporal_sample_index,
-                self.cfg.TEST.NUM_ENSEMBLE_VIEWS,
-                video_meta=(
-                    self._video_meta[index] if len(self._video_meta) < 5e6 else {}
-                ),  # do not cache on huge datasets
-                target_fps=target_fps,
-                backend=self.cfg.DATA.DECODING_BACKEND,
-                use_offset=self.cfg.DATA.USE_OFFSET_SAMPLING,
-                max_spatial_scale=(
-                    min_scale[0] if all(x == min_scale[0] for x in min_scale) else 0
-                ),  # if self.mode in ["test"] else 0,
-                time_diff_prob=self.p_convert_dt if self.mode in ["train"] else 0.0,
-                temporally_rnd_clips=True,
-                min_delta=self.cfg.CONTRASTIVE.DELTA_CLIPS_MIN,
-                max_delta=self.cfg.CONTRASTIVE.DELTA_CLIPS_MAX,
-            )
+            if os.path.isdir(self._path_to_videos[index]):
+                # 使用图片帧目录解码
+                frames, time_idx, tdiff = self._decode_image_sequence(
+                    dir_path=self._path_to_videos[index],
+                    sampling_rate=sampling_rate,
+                    num_frames=num_frames,
+                    clip_idx=temporal_sample_index,
+                    num_clips_uniform=self.cfg.TEST.NUM_ENSEMBLE_VIEWS,
+                )
+            else:
+                frames, time_idx, tdiff = decoder.decode(
+                    video_container,
+                    sampling_rate,
+                    num_frames,
+                    temporal_sample_index,
+                    self.cfg.TEST.NUM_ENSEMBLE_VIEWS,
+                    video_meta=(
+                        self._video_meta[index] if len(self._video_meta) < 5e6 else {}
+                    ),  # do not cache on huge datasets
+                    target_fps=target_fps,
+                    backend=self.cfg.DATA.DECODING_BACKEND,
+                    use_offset=self.cfg.DATA.USE_OFFSET_SAMPLING,
+                    max_spatial_scale=(
+                        min_scale[0] if all(x == min_scale[0] for x in min_scale) else 0
+                    ),  # if self.mode in ["test"] else 0,
+                    time_diff_prob=self.p_convert_dt if self.mode in ["train"] else 0.0,
+                    temporally_rnd_clips=True,
+                    min_delta=self.cfg.CONTRASTIVE.DELTA_CLIPS_MIN,
+                    max_delta=self.cfg.CONTRASTIVE.DELTA_CLIPS_MAX,
+                )
             frames_decoded = frames
             time_idx_decoded = time_idx
 
@@ -511,6 +526,68 @@ class Kinetics(torch.utils.data.Dataset):
     def _list_img_to_frames(self, img_list):
         img_list = [transforms.ToTensor()(img) for img in img_list]
         return torch.stack(img_list)
+
+    def _decode_image_sequence(
+        self,
+        dir_path,
+        sampling_rate,
+        num_frames,
+        clip_idx=-1,
+        num_clips_uniform=1,
+    ):
+        """从图片帧目录中加载并采样形成与 decode 返回格式兼容的结果。
+        Args:
+            dir_path (str): 帧图片所在目录。
+            sampling_rate (list[int]): 采样间隔列表（与视频逻辑保持一致）。
+            num_frames (list[int]): 每个 clip 要的帧数列表。
+            clip_idx (int): 与原接口一致，-1 表示随机，>=0 表示 uniform 选择第 clip_idx 个视图。
+            num_clips_uniform (int): 测试时的视图数，用于均匀划分。
+        Returns:
+            frames_out (list[Tensor]): 每个 clip 的张量 (T,H,W,C) uint8。
+            time_idx (np.ndarray): 形状 (num_decode,2) 的开始/结束索引，仅用于占位。
+            tdiff (None): 与视频接口保持一致。
+        """
+        # 收集所有 jpg/png 图片
+        img_files = [
+            f
+            for f in sorted(os.listdir(dir_path))
+            if f.lower().endswith((".jpg", ".jpeg", ".png"))
+        ]
+        if len(img_files) == 0:
+            return None, None, None
+        num_decode = len(num_frames)
+        frames_out = [None] * num_decode
+        time_idx_out = np.zeros((num_decode, 2), dtype=np.int64)
+        total = len(img_files)
+        for i in range(num_decode):
+            sr = sampling_rate[i]
+            nf = num_frames[i]
+            span = sr * nf
+            # 可选的起始区间
+            max_start = max(0, total - span)
+            if clip_idx == -1:  # 训练随机
+                start = random.randint(0, max_start) if max_start > 0 else 0
+            else:  # 测试均匀
+                if num_clips_uniform <= 1 or max_start == 0:
+                    start = 0
+                else:
+                    start = int(round(max_start * clip_idx / max(1, num_clips_uniform - 1)))
+            indices = [start + k * sr for k in range(nf)]
+            # 越界则使用最后一帧填充
+            indices = [min(idx, total - 1) for idx in indices]
+            sel_files = [img_files[j] for j in indices]
+            frames_np = []
+            for fname in sel_files:
+                with pathmgr.open(os.path.join(dir_path, fname), "rb") as fh:
+                    img = Image.open(fh).convert("RGB")
+                    arr = np.array(img)  # H,W,C uint8
+                frames_np.append(arr)
+            frames_np = np.stack(frames_np, axis=0)  # T,H,W,C
+            frames_tensor = torch.as_tensor(frames_np)
+            frames_out[i] = frames_tensor
+            time_idx_out[i, 0] = indices[0]
+            time_idx_out[i, 1] = indices[-1]
+        return frames_out, time_idx_out, None
 
     def __len__(self):
         """

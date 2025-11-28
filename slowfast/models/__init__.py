@@ -16,4 +16,4 @@ try:
         PTVX3D,
     )  # noqa
 except Exception:
-    print("Please update your PyTorchVideo to latest master")
+    pass  # PyTorchVideo models not available

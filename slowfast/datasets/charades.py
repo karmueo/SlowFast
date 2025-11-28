@@ -209,9 +209,20 @@ class Charades(torch.utils.data.Dataset):
         label = utils.aggregate_labels(
             [self._labels[index][i] for i in range(seq[0], seq[-1] + 1)]
         )
-        label = torch.as_tensor(
-            utils.as_binary_vector(label, self.cfg.MODEL.NUM_CLASSES)
-        )
+        # If dataset is configured to use multi-label, return a binary vector.
+        # Otherwise, return a single integer class index (long tensor).
+        if self.cfg.DATA.MULTI_LABEL:
+            label = torch.as_tensor(
+                utils.as_binary_vector(label, self.cfg.MODEL.NUM_CLASSES)
+            )
+        else:
+            # For single-label classification, pick the first label if multiple
+            # exist, or use 0 if no label is present.
+            if len(label) == 0:
+                label_idx = 0
+            else:
+                label_idx = int(label[0])
+            label = torch.tensor(label_idx).long()
 
         # Perform color normalization.
         frames = utils.tensor_normalize(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)

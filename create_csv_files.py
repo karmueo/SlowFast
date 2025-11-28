@@ -1,0 +1,112 @@
+import argparse
+import random
+import glob
+from pathlib import Path
+from typing import List, Tuple
+
+# 默认参数，可通过命令行覆盖
+DEFAULT_ROOT = Path("./mmaction2/110_video_frames_200_test2").resolve()
+DEFAULT_SEED = 0
+DEFAULT_RATIOS = (0.0, 0.0, 1.0)  # train, val, test
+DEFAULT_SEPARATOR = " "  # 与 kinetics 解析的 PATH_LABEL_SEPARATOR 对齐
+
+
+def count_frames(dir_path: Path) -> int:
+    """统计一个样本目录中的帧数（支持常见图片扩展名）。"""
+    exts = ("*.jpg", "*.jpeg", "*.png", "*.bmp")
+    n = 0
+    for e in exts:
+        n += len(glob.glob(str(dir_path / e)))
+    return n
+
+
+def build_class_index(class_dirs: List[Path]):
+    """将类别目录名映射为连续整数标签（按名称排序保证稳定）。"""
+    class_names = sorted([p.name for p in class_dirs])
+    return {name: idx for idx, name in enumerate(class_names)}
+
+
+def collect_samples(root: Path) -> Tuple[List[Tuple[str, int, int]], dict]:
+    """收集所有样本，返回 (relative_dir, num_frames, int_label) 列表。"""
+    # 仅取一级子目录作为类别
+    class_dirs = [p for p in root.iterdir() if p.is_dir()]
+    if not class_dirs:
+        raise SystemExit(f"未找到类别目录，请检查路径: {root}")
+
+    cls2idx = build_class_index(class_dirs)
+    samples = []
+    for cls_dir in class_dirs:
+        cls_name = cls_dir.name
+        cls_idx = cls2idx[cls_name]
+        # 样本目录为类别目录下的子目录
+        for v in cls_dir.iterdir():
+            if v.is_dir():
+                n = count_frames(v)
+                if n > 0:
+                    rel = v.relative_to(root).as_posix()
+                    # 写入整数标签，避免字符串标签被误解析
+                    samples.append((rel, n, cls_idx))
+    if not samples:
+        raise SystemExit("未找到任何包含帧的样本目录，请检查数据组织。")
+    return samples, cls2idx
+
+
+def write_txt(path: Path, rows: List[Tuple[str, int, int]], sep: str):
+    """写三列文本：frame_dir num_frames label(int)，用指定分隔符，不写表头。"""
+    with open(path, "w") as f:
+        for r in rows:
+            f.write(f"{r[0]}{sep}{r[1]}{sep}{r[2]}\n")
+
+
+def parse_args():
+    ap = argparse.ArgumentParser("Generate train/val/test csv for frame directory dataset")
+    ap.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="Root dir containing class subdirs")
+    ap.add_argument("--train-ratio", type=float, default=DEFAULT_RATIOS[0], help="Train split ratio")
+    ap.add_argument("--val-ratio", type=float, default=DEFAULT_RATIOS[1], help="Validation split ratio")
+    ap.add_argument("--test-ratio", type=float, default=DEFAULT_RATIOS[2], help="Test split ratio; if 0, test=val copy")
+    ap.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Random seed")
+    ap.add_argument("--separator", type=str, default=DEFAULT_SEPARATOR, help="Field separator (must match PATH_LABEL_SEPARATOR)")
+    ap.add_argument("--output-dir", type=Path, default=None, help="Where to write csv files (default: root)")
+    return ap.parse_args()
+
+
+def main():
+    args = parse_args()
+    root = args.root.resolve()
+    out_dir = args.output_dir.resolve() if args.output_dir else root
+    if not root.exists():
+        raise SystemExit(f"数据根目录不存在: {root}")
+    ratios = (args.train_ratio, args.val_ratio, args.test_ratio)
+    s = sum(ratios)
+    if s <= 0:
+        raise SystemExit("所有划分比例之和必须 > 0")
+    # 归一化，允许用户不严格和为1
+    ratios = tuple(r / s for r in ratios)
+    random.seed(args.seed)
+    samples, cls2idx = collect_samples(root)
+    random.shuffle(samples)
+    n_total = len(samples)
+    n_train = int(n_total * ratios[0])
+    n_val = int(n_total * ratios[1])
+    # 剩余为 test
+    # 剩余样本作为测试集（无需单独变量）
+    train = samples[:n_train]
+    val = samples[n_train : n_train + n_val]
+    test = samples[n_train + n_val :]
+    # 若用户 test_ratio 为 0 则用 val 作为 test 备份
+    if args.test_ratio == 0.0:
+        test = val
+    out_dir.mkdir(parents=True, exist_ok=True)
+    write_txt(out_dir / "train.csv", train, args.separator)
+    write_txt(out_dir / "val.csv", val, args.separator)
+    write_txt(out_dir / "test.csv", test, args.separator)
+    print(f"写入: {out_dir / 'train.csv'} ({len(train)})")
+    print(f"写入: {out_dir / 'val.csv'} ({len(val)})")
+    print(f"写入: {out_dir / 'test.csv'} ({len(test)})")
+    print("类别映射：")
+    for name, idx in sorted(cls2idx.items(), key=lambda x: x[1]):
+        print(f"  {idx}: {name}")
+
+
+if __name__ == "__main__":
+    main()

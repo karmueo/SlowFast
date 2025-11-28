@@ -32,7 +32,8 @@ def check_nan_losses(loss):
     Args:
         loss (loss): loss to check whether is NaN.
     """
-    if math.isnan(loss):
+    loss_val = loss.detach() if hasattr(loss, 'detach') else loss
+    if math.isnan(loss_val):
         raise RuntimeError("ERROR: Got NaN losses {}".format(datetime.now()))
 
 

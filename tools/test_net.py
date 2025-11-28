@@ -123,6 +123,16 @@ def perform_test(test_loader, model, test_meter, cfg, writer=None):
         test_meter.iter_toc()
 
         if not cfg.VIS_MASK.ENABLE:
+            # If labels are one-hot/multi-dimensional but dataset is single-label,
+            # convert them to class indices so that TestMeter can consume scalar labels.
+            if not cfg.DATA.MULTI_LABEL and labels.dim() > 1:
+                if labels.shape[1] > 1:
+                    labels = labels.argmax(dim=1)
+                else:
+                    labels = labels.squeeze(1)
+            if not torch.is_tensor(labels):
+                labels = torch.as_tensor(labels)
+            labels = labels.long()
             # Update and log stats.
             test_meter.update_stats(preds.detach(), labels.detach(), video_idx.detach())
         test_meter.log_iter_stats(cur_iter)

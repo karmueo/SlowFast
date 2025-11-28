@@ -376,6 +376,10 @@ class TestMeter:
         ks (tuple): list of top-k values for topk_accuracies. For example,
             ks = (1, 5) correspods to top-1 and top-5 accuracy.
         """
+        # 将 ks 限制不超过类别数，避免 topk 超出范围导致运行错误
+        if hasattr(self, "video_preds") and self.video_preds is not None:
+            num_classes = self.video_preds.size(1)
+            ks = tuple(sorted(set(min(int(k), int(num_classes)) for k in ks)))
         clip_check = self.clip_count == self.num_clips
         if not all(clip_check):
             logger.warning(
@@ -404,6 +408,18 @@ class TestMeter:
             for k, topk in zip(ks, topks):
                 # self.stats["top{}_acc".format(k)] = topk.cpu().numpy()
                 self.stats["top{}_acc".format(k)] = "{:.{prec}f}".format(topk, prec=2)
+            # 向后兼容：若请求 top5，但类别数不足以计算 top5，则回退到可用的最大 topK
+            if "top5_acc" not in self.stats:
+                if hasattr(self, "video_preds") and self.video_preds is not None:
+                    max_k = min(5, int(self.video_preds.size(1)))
+                    fallback_key = "top{}_acc".format(max_k)
+                    if fallback_key in self.stats:
+                        self.stats["top5_acc"] = self.stats[fallback_key]
+                    elif "top1_acc" in self.stats:
+                        self.stats["top5_acc"] = self.stats["top1_acc"]
+                    else:
+                        # 若异常，设为 0.00 以避免 KeyError
+                        self.stats["top5_acc"] = "0.00"
         logging.log_json_stats(self.stats)
 
 

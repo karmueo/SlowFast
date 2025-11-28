@@ -515,10 +515,20 @@ def load_checkpoint(
             # Load the optimizer state (commonly not done when fine-tuning)
         if "epoch" in checkpoint.keys() and not epoch_reset:
             epoch = checkpoint["epoch"]
-            if optimizer:
-                optimizer.load_state_dict(checkpoint["optimizer_state"])
-            if scaler:
-                scaler.load_state_dict(checkpoint["scaler_state"])
+            if optimizer and "optimizer_state" in checkpoint:
+                try:
+                    optimizer.load_state_dict(checkpoint["optimizer_state"])
+                except (ValueError, KeyError) as e:
+                    logger.warning(
+                        "Skipping optimizer state load due to mismatch: {}".format(e)
+                    )
+            if scaler and "scaler_state" in checkpoint:
+                try:
+                    scaler.load_state_dict(checkpoint["scaler_state"])
+                except (ValueError, KeyError) as e:
+                    logger.warning(
+                        "Skipping scaler state load due to mismatch: {}".format(e)
+                    )
         else:
             epoch = -1
     return epoch

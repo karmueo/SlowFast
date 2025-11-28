@@ -111,7 +111,7 @@ def train_epoch(
             samples, labels = mixup_fn(inputs[0], labels)
             inputs[0] = samples
 
-        with torch.cuda.amp.autocast(enabled=cfg.TRAIN.MIXED_PRECISION):
+        with torch.autocast('cuda', enabled=cfg.TRAIN.MIXED_PRECISION):
             # Explicitly declare reduction to mean.
             perform_backward = True
             optimizer.zero_grad()
@@ -223,7 +223,21 @@ def train_epoch(
                     loss_extra = [one_loss.item() for one_loss in loss_extra]
             else:
                 # Compute the errors.
-                num_topks_correct = metrics.topks_correct(preds, labels, (1, 5))
+                # Adjust top-k based on number of classes
+                num_classes = preds.size(1)
+                ks = (1, min(5, num_classes))
+                
+                # Handle multi-label format from Charades dataset
+                # If labels is multi-dimensional (one-hot), convert to class indices
+                if not torch.is_tensor(labels):
+                    labels = torch.as_tensor(labels)
+                if len(labels.shape) > 1:
+                    if labels.shape[1] > 1:
+                        labels = labels.argmax(dim=1)
+                    else:
+                        labels = labels.squeeze(1)
+                
+                num_topks_correct = metrics.topks_correct(preds, labels, ks)
                 top1_err, top5_err = [
                     (1.0 - x / preds.size(0)) * 100.0 for x in num_topks_correct
                 ]
@@ -372,7 +386,21 @@ def eval_epoch(val_loader, model, val_meter, cur_epoch, cfg, train_loader, write
                 if cfg.DATA.IN22k_VAL_IN1K != "":
                     preds = preds[:, :1000]
                 # Compute the errors.
-                num_topks_correct = metrics.topks_correct(preds, labels, (1, 5))
+                # Adjust top-k based on number of classes
+                num_classes = preds.size(1)
+                ks = (1, min(5, num_classes))
+                
+                # Handle multi-label format from Charades dataset
+                # If labels is multi-dimensional (one-hot), convert to class indices
+                if not torch.is_tensor(labels):
+                    labels = torch.as_tensor(labels)
+                if len(labels.shape) > 1:
+                    if labels.shape[1] > 1:
+                        labels = labels.argmax(dim=1)
+                    else:
+                        labels = labels.squeeze(1)
+                
+                num_topks_correct = metrics.topks_correct(preds, labels, ks)
 
                 # Combine the errors across the GPUs.
                 top1_err, top5_err = [

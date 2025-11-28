@@ -1,0 +1,55 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Test X3D custom model",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/run_net.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "configs/Custom/X3D_M_custom.yaml",
+                "--opts",
+                "DATA.PATH_TO_DATA_DIR",
+                "./mmaction2/110_video_frames_200_test2",
+                "DATA.PATH_PREFIX",
+                "./mmaction2/110_video_frames_200_test2",
+                "TRAIN.ENABLE",
+                "False",
+                "TEST.ENABLE",
+                "True",
+                "TEST.CHECKPOINT_FILE_PATH",
+                "output/custom_x3d_2/checkpoints/checkpoint_epoch_00150.pyth",
+                "TEST.CHECKPOINT_TYPE",
+                "pytorch",
+                "TEST.NUM_SPATIAL_CROPS",
+                "1",
+                "TEST.SAVE_RESULTS_PATH",
+                "test_results.pkl"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "Report misclassifications (from test_results.pkl)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/report_misclassifications.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--results", "./output/custom_x3d_3/test_results.pkl",
+                "--data_dir", "./mmaction2/110_video_frames_200_test2",
+                "--path_prefix", "./mmaction2/110_video_frames_200_test2",
+                "--topk", "2",
+                "--out_csv", "./output/custom_x3d_3/misclassified.csv"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        }
+    ]
+}
