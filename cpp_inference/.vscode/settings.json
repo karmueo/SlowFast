@@ -1,0 +1,8 @@
+{
+    "cmake.debugConfig": {
+        "args": [
+            "../../output/custom_x3d_3/custom_x3d_3.engine",
+            "../../mmaction2/110_video_frames_200_test2/uav/Smart_Record_00180_20251113-093516_68600_7"
+        ]
+    }
+}

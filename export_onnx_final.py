@@ -266,20 +266,25 @@ def test_with_real_data(pytorch_model, onnx_path, test_path, is_video, cfg, clas
             pytorch_out = pytorch_out[0]
     
     pytorch_logits = pytorch_out.numpy()[0]
-    pytorch_probs = np.exp(pytorch_logits - np.max(pytorch_logits))
-    pytorch_probs /= pytorch_probs.sum()
-    pytorch_class = np.argmax(pytorch_logits)
-    pytorch_conf = pytorch_probs[pytorch_class]
     
-    print(f"Logits:  {pytorch_logits}")
-    print(f"Probs:   {pytorch_probs}")
-    print(f"Class:   {pytorch_class}", end="")
-    if class_names and pytorch_class < len(class_names):
-        print(f" ({class_names[pytorch_class]})")
-    else:
-        print()
-    print(f"Confidence: {pytorch_conf:.4f} ({pytorch_conf*100:.2f}%)")
-    
+    # Helper to process 5D output
+    def process_5d_output(output, name):
+        if output.ndim != 4: return None, None
+        
+        # Check if probabilities (sum close to 1)
+        is_probs = np.allclose(output.sum(axis=-1), 1.0, atol=1e-3)
+        
+        if is_probs:
+            print(f"[{name}] Detected 5D output (Probabilities)")
+            probs_map = output
+        else:
+            print(f"[{name}] Detected 5D output (Logits)")
+            exp_x = np.exp(output - np.max(output, axis=-1, keepdims=True))
+            probs_map = exp_x / np.sum(exp_x, axis=-1, keepdims=True)
+            
+        final_probs = np.mean(probs_map, axis=(0, 1, 2))
+        return probs_map, final_probs
+
     # ONNX inference
     print("\n" + "-"*70)
     print("ONNX Model Inference:")
@@ -288,12 +293,105 @@ def test_with_real_data(pytorch_model, onnx_path, test_path, is_video, cfg, clas
     onnx_out = session.run(None, {session.get_inputs()[0].name: input_tensor.numpy()})[0]
     
     onnx_logits = onnx_out[0]
-    onnx_probs = np.exp(onnx_logits - np.max(onnx_logits))
-    onnx_probs /= onnx_probs.sum()
-    onnx_class = np.argmax(onnx_logits)
-    onnx_conf = onnx_probs[onnx_class]
     
-    print(f"Logits:  {onnx_logits}")
+    # Process outputs
+    pytorch_probs_map, pytorch_final_probs = process_5d_output(pytorch_logits, "PyTorch")
+    onnx_probs_map, onnx_final_probs = process_5d_output(onnx_logits, "ONNX")
+    
+    if pytorch_probs_map is not None and onnx_probs_map is not None:
+        # Use calculated probs for display and comparison
+        pytorch_class = np.argmax(pytorch_final_probs)
+        pytorch_conf = pytorch_final_probs[pytorch_class]
+        
+        onnx_class = np.argmax(onnx_final_probs)
+        onnx_conf = onnx_final_probs[onnx_class]
+        
+        # Compare probability maps
+        diff = np.abs(pytorch_probs_map - onnx_probs_map)
+        
+        print(f"Logits/Probs Shape: {onnx_logits.shape}")
+        print(f"Probs:   {onnx_final_probs}")
+        print(f"Class:   {onnx_class}", end="")
+        if class_names and onnx_class < len(class_names):
+            print(f" ({class_names[onnx_class]})")
+        else:
+            print()
+        print(f"Confidence: {onnx_conf:.4f} ({onnx_conf*100:.2f}%)")
+        
+        # Compare
+        print("\n" + "-"*70)
+        print("Comparison:")
+        print("-"*70)
+        print(f"Max difference (map):  {diff.max():.8f}")
+        print(f"Mean difference (map): {diff.mean():.8f}")
+        
+        if pytorch_class == onnx_class:
+            print(f"\n✓ Both predict class {pytorch_class}", end="")
+            if class_names and pytorch_class < len(class_names):
+                print(f" ({class_names[pytorch_class]})")
+            else:
+                print()
+            print(f"  PyTorch: {pytorch_conf:.4f}")
+            print(f"  ONNX:    {onnx_conf:.4f}")
+            print(f"  Diff:    {abs(pytorch_conf - onnx_conf):.4f}")
+        else:
+            print("\n✗ Different predictions!")
+            print(f"  PyTorch: {pytorch_class} (conf: {pytorch_conf:.4f})")
+            print(f"  ONNX:    {onnx_class} (conf: {onnx_conf:.4f})")
+        
+        print("="*70 + "\n")
+        return
+
+    # Fallback for non-5D output (legacy logic)
+    # Handle 5D output (Frames, H, W, Classes)
+    if pytorch_logits.ndim == 4:
+        print("Detected 5D output (Logits), applying Softmax + Mean...")
+        # Softmax on last dim
+        exp_x = np.exp(pytorch_logits - np.max(pytorch_logits, axis=-1, keepdims=True))
+        pytorch_probs = exp_x / np.sum(exp_x, axis=-1, keepdims=True)
+        # Mean over Frames, H, W
+        pytorch_probs = np.mean(pytorch_probs, axis=(0, 1, 2))
+        
+        pytorch_class = np.argmax(pytorch_probs)
+        pytorch_conf = pytorch_probs[pytorch_class]
+    else:
+        pytorch_probs = np.exp(pytorch_logits - np.max(pytorch_logits))
+        pytorch_probs /= pytorch_probs.sum()
+        pytorch_class = np.argmax(pytorch_logits)
+        pytorch_conf = pytorch_probs[pytorch_class]
+    
+    print(f"Logits:  {pytorch_logits.shape if pytorch_logits.ndim == 4 else pytorch_logits}")
+    print(f"Probs:   {pytorch_probs}")
+    print(f"Class:   {pytorch_class}", end="")
+    if class_names and pytorch_class < len(class_names):
+        print(f" ({class_names[pytorch_class]})")
+    else:
+        print()
+    print(f"Confidence: {pytorch_conf:.4f} ({pytorch_conf*100:.2f}%)")
+    
+    # ONNX inference (already run above, but need to process if not 5D)
+    # ... logic for non-5D ONNX ...
+    
+    onnx_logits = onnx_out[0]
+    
+    # Handle 5D output (Frames, H, W, Classes)
+    if onnx_logits.ndim == 4:
+        print("Detected 5D output (Logits), applying Softmax + Mean...")
+        # Softmax on last dim
+        exp_x = np.exp(onnx_logits - np.max(onnx_logits, axis=-1, keepdims=True))
+        onnx_probs = exp_x / np.sum(exp_x, axis=-1, keepdims=True)
+        # Mean over Frames, H, W
+        onnx_probs = np.mean(onnx_probs, axis=(0, 1, 2))
+        
+        onnx_class = np.argmax(onnx_probs)
+        onnx_conf = onnx_probs[onnx_class]
+    else:
+        onnx_probs = np.exp(onnx_logits - np.max(onnx_logits))
+        onnx_probs /= onnx_probs.sum()
+        onnx_class = np.argmax(onnx_logits)
+        onnx_conf = onnx_probs[onnx_class]
+    
+    print(f"Logits:  {onnx_logits.shape if onnx_logits.ndim == 4 else onnx_logits}")
     print(f"Probs:   {onnx_probs}")
     print(f"Class:   {onnx_class}", end="")
     if class_names and onnx_class < len(class_names):
@@ -360,18 +458,50 @@ def main():
     print(f"\nDummy input shape: ({batch_size}, {channels}, {num_frames}, {height}, {width})")
     dummy_input = torch.randn(batch_size, channels, num_frames, height, width)
     
-    # Wrapper for original model (outputs logits)
+    # Monkey-patch the head to return raw logits (N, T, H, W, C)
+    # This avoids Softmax and ReduceMean inside the ONNX model, which causes issues in TensorRT
+    import types
+    def custom_head_forward(self, inputs):
+        assert len(inputs) == 1, "Input tensor does not contain 1 pathway"
+        x = self.conv_5(inputs[0])
+        x = self.conv_5_bn(x)
+        x = self.conv_5_relu(x)
+        x = self.avg_pool(x)
+
+        x = self.lin_5(x)
+        if self.bn_lin5_on:
+            x = self.lin_5_bn(x)
+        x = self.lin_5_relu(x)
+
+        # (N, C, T, H, W) -> (N, T, H, W, C).
+        x = x.permute((0, 2, 3, 4, 1))
+        if hasattr(self, "dropout"):
+            x = self.dropout(x)
+        x = self.projection(x)
+        return x
+
+    print("Patching model head to return raw logits...")
+    if hasattr(model, 'head'):
+        model.head.forward = types.MethodType(custom_head_forward, model.head)
+    else:
+        print("Warning: Could not find model.head to patch!")
+
+    # Wrapper for original model (outputs logits -> softmax)
     class Wrapper(torch.nn.Module):
         def __init__(self, m):
             super().__init__()
             self.m = m
         def forward(self, x):
             o = self.m([x])
-            return o[0] if isinstance(o, (list, tuple)) else o
+            logits = o[0] if isinstance(o, (list, tuple)) else o
+            # Apply softmax on C (dim 4)
+            probs = torch.nn.functional.softmax(logits, dim=4)
+            return probs
     
     wrapped = Wrapper(model).eval()
     
-    # Wrapper with softmax for inference
+    # Wrapper with softmax for inference (updated for patched head)
+    # Note: Since we moved softmax to the main wrapper, this one adds Mean reduction
     class WrapperWithSoftmax(torch.nn.Module):
         def __init__(self, m):
             super().__init__()
@@ -379,12 +509,17 @@ def main():
         def forward(self, x):
             o = self.m([x])
             logits = o[0] if isinstance(o, (list, tuple)) else o
-            return torch.nn.functional.softmax(logits, dim=1)
+            # logits is (N, T, H, W, C)
+            # Apply softmax on C (dim 4)
+            probs = torch.nn.functional.softmax(logits, dim=4)
+            # Mean over T, H, W (dims 1, 2, 3)
+            probs = probs.mean([1, 2, 3])
+            return probs
     
     wrapped_with_softmax = WrapperWithSoftmax(model).eval()
     
     # Export ONNX (original model with logits)
-    print(f"\nExporting original model (logits output) to ONNX: {args.output}")
+    print(f"\nExporting original model (probabilities output, no reduce) to ONNX: {args.output}")
     print(f"Opset version: {args.opset}")
     print(f"Using legacy exporter: {not args.use_dynamo}")
     

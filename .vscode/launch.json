@@ -65,7 +65,7 @@
                 "output/custom_x3d_3/checkpoints/checkpoint_epoch_00150.pyth",
                 "--output",
                 "output/custom_x3d_3/model.onnx",
-                "--export_softmax",
+                // "--export_softmax",
                 "--simplify",
                 "--test_frames",
                 "mmaction2/110_video_frames_200_test2/bird/Smart_Record_00049_20251113-032810_68600_1",
@@ -84,11 +84,37 @@
             "console": "integratedTerminal",
             "args": [
                 "--onnx_model",
-                "output/custom_x3d_3/model_softmax.onnx",
+                "output/custom_x3d_3/model_simplified.onnx",
                 "--input_folder",
-                "mmaction2/110_video_frames_200_test2/bird/Smart_Record_00049_20251113-032810_68600_1",
+                "mmaction2/110_video_frames_200_test2/uav/Smart_Record_00180_20251113-093516_68600_7",
                 "--cfg",
                 "configs/Custom/X3D_M_custom.yaml"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "TensorRT Inference (X3D)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tensorrt_inference.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--engine",
+                "output/custom_x3d_3/custom_x3d_3.engine",
+                "--frames",
+                "mmaction2/110_video_frames_200_test2/uav/Smart_Record_00180_20251113-093516_68600_7",
+                "--num_frames",
+                "32",
+                "--sampling_rate",
+                "5",
+                "--crop_size",
+                "64",
+                "--print_input_samples",
+                "--class_names",
+                "鸟,无人机"
             ],
             "env": {
                 "PYTHONUNBUFFERED": "1"

@@ -182,6 +182,17 @@ int main(int argc, char** argv) {
     // Preprocess
     std::cout << "Preprocessing images from " << imageFolder << "..." << std::endl;
     preprocess(imageFolder, hostInput);
+    
+    // Save input for comparison
+    std::ofstream outfile("cpp_input.bin", std::ios::binary);
+    outfile.write(reinterpret_cast<char*>(hostInput), inputSize);
+    outfile.close();
+    std::cout << "Saved C++ input to cpp_input.bin" << std::endl;
+    std::cout << "Sample values: ";
+    for (int i = 0; i < 10; ++i) {
+        std::cout << hostInput[i] << " ";
+    }
+    std::cout << std::endl;
 
     // Copy to device
     checkCudaErrors(cudaMemcpy(deviceInput, hostInput, inputSize, cudaMemcpyHostToDevice));

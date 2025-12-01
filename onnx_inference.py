@@ -10,6 +10,7 @@ def parse_args():
     parser.add_argument("--onnx_model", required=True, help="Path to ONNX model")
     parser.add_argument("--input_folder", required=True, help="Path to video frames folder")
     parser.add_argument("--cfg", required=True, help="Path to config file")
+    parser.add_argument("--input_npy", type=str, default=None, help="Path to .npy file to use as input (overrides input_folder)")
     return parser.parse_args()
 
 def load_config(cfg_file):
@@ -100,11 +101,18 @@ def main():
     cfg = load_config(args.cfg)
     
     # Preprocess
-    print(f"Preprocessing images from {args.input_folder}...")
-    input_tensor = preprocess(cfg, args.input_folder)
-    print(f"Input tensor shape: {input_tensor.shape}")
+    if args.input_npy:
+        print(f"Loading input from {args.input_npy}...")
+        input_tensor = np.load(args.input_npy)
+    else:
+        print(f"Preprocessing images from {args.input_folder}...")
+        input_tensor = preprocess(cfg, args.input_folder)
+        # Save input tensor for comparison
+        np.save("python_input.npy", input_tensor)
+        print("Saved Python input to python_input.npy")
     
-    # Load ONNX model
+    print(f"Input tensor shape: {input_tensor.shape}")
+    print(f"Sample values: {input_tensor.flatten()[:10]}")  # Print first 10 values
     print(f"Loading ONNX model from {args.onnx_model}...")
     ort_session = ort.InferenceSession(args.onnx_model)
     
@@ -117,12 +125,23 @@ def main():
     
     # Output results
     output = outputs[0]
+    print(f"Raw Output shape: {output.shape}")
+    
+    # Handle 5D output (N, T, H, W, C)
+    if output.ndim == 5:
+        print("Detected 5D output (Probabilities), applying Mean...")
+        # Mean over T, H, W
+        output = np.mean(output, axis=(1, 2, 3))
+    
     print("Inference Results:")
     print(output)
     
-    if output.shape[1] == 2:
+    if output.ndim == 2 and output.shape[1] == 2:
         print(f"Class 0: {output[0][0]}")
         print(f"Class 1: {output[0][1]}")
+    elif output.ndim == 1 and output.shape[0] == 2:
+        print(f"Class 0: {output[0]}")
+        print(f"Class 1: {output[1]}")
 
 if __name__ == "__main__":
     main()
