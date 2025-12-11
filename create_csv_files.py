@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import List, Tuple
 
 # 默认参数，可通过命令行覆盖
-DEFAULT_ROOT = Path("./mmaction2/110_video_frames_200_test2").resolve()
+DEFAULT_ROOT = Path("./mmaction2/110_video_frames_2025_11_all_200").resolve()
 DEFAULT_SEED = 0
-DEFAULT_RATIOS = (0.0, 0.0, 1.0)  # train, val, test
+DEFAULT_RATIOS = (0.9, 0.1, 0.0)  # train, val, test
 DEFAULT_SEPARATOR = " "  # 与 kinetics 解析的 PATH_LABEL_SEPARATOR 对齐
 
 
