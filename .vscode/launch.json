@@ -13,15 +13,15 @@
                 "configs/Custom/X3D_M_custom.yaml",
                 "--opts",
                 "DATA.PATH_TO_DATA_DIR",
-                "./mmaction2/110_video_frames_200_test2",
+                "./mmaction2/110_video_frames_2025_11_all_200_have_json",
                 "DATA.PATH_PREFIX",
-                "./mmaction2/110_video_frames_200_test2",
+                "./mmaction2/110_video_frames_2025_11_all_200_have_json",
                 "TRAIN.ENABLE",
                 "False",
                 "TEST.ENABLE",
                 "True",
                 "TEST.CHECKPOINT_FILE_PATH",
-                "output/custom_x3d_2/checkpoints/checkpoint_epoch_00150.pyth",
+                "output/custom_x3d_v6_4cls/checkpoints/checkpoint_epoch_00120.pyth",
                 "TEST.CHECKPOINT_TYPE",
                 "pytorch",
                 "TEST.NUM_SPATIAL_CROPS",
@@ -30,7 +30,8 @@
                 "test_results.pkl"
             ],
             "env": {
-                "PYTHONUNBUFFERED": "1"
+                "PYTHONUNBUFFERED": "1",
+                "CUDA_VISIBLE_DEVICES": "2"
             }
         },
         {
@@ -62,14 +63,14 @@
                 "--cfg",
                 "configs/Custom/X3D_M_custom.yaml",
                 "--checkpoint",
-                "output/custom_x3d_3/checkpoints/checkpoint_epoch_00150.pyth",
+                "output/custom_x3d_v4/checkpoints/checkpoint_epoch_00150.pyth",
                 "--output",
-                "output/custom_x3d_3/model.onnx",
+                "output/custom_x3d_v4/model.onnx",
                 // "--export_softmax",
                 "--simplify",
                 "--test_frames",
                 "mmaction2/110_video_frames_200_test2/bird/Smart_Record_00049_20251113-032810_68600_1",
-                "--class_names", "鸟,无人机"
+                "--class_names", "鸟,无人机,夜间无人机"
             ],
             "env": {
                 "PYTHONUNBUFFERED": "1"
@@ -115,6 +116,21 @@
                 "--print_input_samples",
                 "--class_names",
                 "鸟,无人机"
+            ],
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "Train X3D custom model",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/run_net.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--cfg",
+                "configs/Custom/X3D_M_custom.yaml",
             ],
             "env": {
                 "PYTHONUNBUFFERED": "1"

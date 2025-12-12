@@ -1,20 +1,20 @@
 TRAIN:
   ENABLE: True
   DATASET: kinetics  # 使用修改后的 Kinetics 数据集（支持帧目录）
-  BATCH_SIZE: 128
+  BATCH_SIZE: 16
   EVAL_PERIOD: 5
-  CHECKPOINT_PERIOD: 5
+  CHECKPOINT_PERIOD: 10
   AUTO_RESUME: False  # 改为 False 以从预训练权重开始新训练，而非恢复之前的 checkpoint
   CHECKPOINT_EPOCH_RESET: True  # 重置 epoch 计数器，从 0 开始训练
 DATA:
-  NUM_FRAMES: 32          # 调整为更常见 clip 长度（原 13 可用，如需保持可还原）
-  SAMPLING_RATE: 5        # 降低采样率，避免目录帧不足时大量重复最后一帧
-  TRAIN_JITTER_SCALES: [64, 68]
+  NUM_FRAMES: 32
+  SAMPLING_RATE: 5
+  TRAIN_JITTER_SCALES: [64, 96]
   TRAIN_CROP_SIZE: 64
   TEST_CROP_SIZE: 64
   INPUT_CHANNEL_NUM: [3]
-  PATH_TO_DATA_DIR: /home/tl/data/datasets/mmaction2/110_video_frames_200  # 目录下需含 train.csv / val.csv / test.csv
-  PATH_PREFIX: /home/tl/data/datasets/mmaction2/110_video_frames_200        # 帧目录相对路径前缀
+  PATH_TO_DATA_DIR: /home/tl/data/datasets/mmaction2/110_video_frames_2025_11_all_200  # 目录下需含 train.csv / val.csv / test.csv
+  PATH_PREFIX: /home/tl/data/datasets/mmaction2/110_video_frames_2025_11_all_200        # 帧目录相对路径前缀
 RESNET:
   ZERO_INIT_FINAL_BN: True
   TRANS_FUNC: x3d_transform
@@ -25,33 +25,34 @@ BN:
   WEIGHT_DECAY: 0.0
 MODEL:
   MODEL_NAME: X3D
-  NUM_CLASSES: 3  # 类别数为 3
+  NUM_CLASSES: 4  # 类别数为 4
   ARCH: x3d
   LOSS_FUNC: cross_entropy
   DROPOUT_RATE: 0.5
 X3D:
-  WIDTH_FACTOR: 2.0
-  DEPTH_FACTOR: 2.2
+  WIDTH_FACTOR: 1.5
+  DEPTH_FACTOR: 1.9
   BOTTLENECK_FACTOR: 2.25
   DIM_C5: 2048
   DIM_C1: 12
+  SPATIAL_STRIDES: [1, 1, 2, 2, 1]
 SOLVER:
-  BASE_LR: 0.1 # 1 machine
+  BASE_LR: 0.005 # 1 machine
   BASE_LR_SCALE_NUM_SHARDS: True
   LR_POLICY: cosine
-  MAX_EPOCH: 150
+  MAX_EPOCH: 120
   WEIGHT_DECAY: 5e-5
-  WARMUP_EPOCHS: 35.0
+  WARMUP_EPOCHS: 10.0
   WARMUP_START_LR: 0.01
   OPTIMIZING_METHOD: sgd
 TEST:
-  ENABLE: TRUE
+  ENABLE: FALSE
   DATASET: kinetics   # 与训练一致
-  BATCH_SIZE: 64
+  BATCH_SIZE: 4
   NUM_SPATIAL_CROPS: 1
 DATA_LOADER:
   NUM_WORKERS: 8
   PIN_MEMORY: True
 NUM_GPUS: 1
 RNG_SEED: 0
-OUTPUT_DIR: ./output/custom_x3d_v4
+OUTPUT_DIR: ./output/custom_x3d_v6_4cls

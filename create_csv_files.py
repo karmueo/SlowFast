@@ -1,13 +1,14 @@
 import argparse
-import random
 import glob
+import random
+import re
 from pathlib import Path
 from typing import List, Tuple
 
 # 默认参数，可通过命令行覆盖
 DEFAULT_ROOT = Path("./mmaction2/110_video_frames_2025_11_all_200").resolve()
 DEFAULT_SEED = 0
-DEFAULT_RATIOS = (0.9, 0.1, 0.0)  # train, val, test
+DEFAULT_RATIOS = (9.0, 0.1, 0.0)  # train, val, test
 DEFAULT_SEPARATOR = " "  # 与 kinetics 解析的 PATH_LABEL_SEPARATOR 对齐
 
 
@@ -20,20 +21,54 @@ def count_frames(dir_path: Path) -> int:
     return n
 
 
-def build_class_index(class_dirs: List[Path]):
-    """将类别目录名映射为连续整数标签（按名称排序保证稳定）。"""
-    class_names = sorted([p.name for p in class_dirs])
+def load_class_map(path: Path) -> dict:
+    """
+    从文本加载类别映射，格式：`<id> <folder>` 或 `<id>,<folder>`，支持 # 注释。
+    返回 {folder: id}
+    """
+    mapping = {}
+    with open(path) as f:
+        for ln in f:
+            ln = ln.split("#", 1)[0].strip()
+            if not ln:
+                continue
+            parts = [p for p in re.split(r"[,\s]+", ln) if p]
+            if len(parts) != 2:
+                raise SystemExit(f"映射行格式错误: {ln}")
+            idx, name = parts
+            mapping[name] = int(idx)
+    if not mapping:
+        raise SystemExit(f"映射文件为空: {path}")
+    return mapping
+
+
+def build_class_index(class_dirs: List[Path], override: dict | None = None):
+    """
+    将类别目录名映射为整数标签。
+    - 如果提供 override（{folder: id}），按该映射；缺失或多余目录会报错。
+    - 否则按名称排序生成连续整数。
+    """
+    dir_names = {p.name for p in class_dirs}
+    if override:
+        missing = set(override.keys()) - dir_names
+        extra = dir_names - set(override.keys())
+        if missing:
+            raise SystemExit(f"映射中存在数据集没有的类别目录: {sorted(missing)}")
+        if extra:
+            raise SystemExit(f"数据集中存在映射未覆盖的类别目录: {sorted(extra)}")
+        return override
+    class_names = sorted(dir_names)
     return {name: idx for idx, name in enumerate(class_names)}
 
 
-def collect_samples(root: Path) -> Tuple[List[Tuple[str, int, int]], dict]:
+def collect_samples(root: Path, class_map: dict | None = None) -> Tuple[List[Tuple[str, int, int]], dict]:
     """收集所有样本，返回 (relative_dir, num_frames, int_label) 列表。"""
     # 仅取一级子目录作为类别
     class_dirs = [p for p in root.iterdir() if p.is_dir()]
     if not class_dirs:
         raise SystemExit(f"未找到类别目录，请检查路径: {root}")
 
-    cls2idx = build_class_index(class_dirs)
+    cls2idx = build_class_index(class_dirs, class_map)
     samples = []
     for cls_dir in class_dirs:
         cls_name = cls_dir.name
@@ -67,6 +102,12 @@ def parse_args():
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Random seed")
     ap.add_argument("--separator", type=str, default=DEFAULT_SEPARATOR, help="Field separator (must match PATH_LABEL_SEPARATOR)")
     ap.add_argument("--output-dir", type=Path, default=None, help="Where to write csv files (default: root)")
+    ap.add_argument(
+        "--class-map",
+        type=Path,
+        default="mmaction2/class_map.txt",
+        help="Optional mapping file: '<id> <folder>' per line",
+    )
     return ap.parse_args()
 
 
@@ -83,7 +124,8 @@ def main():
     # 归一化，允许用户不严格和为1
     ratios = tuple(r / s for r in ratios)
     random.seed(args.seed)
-    samples, cls2idx = collect_samples(root)
+    class_map = load_class_map(args.class_map) if args.class_map else None
+    samples, cls2idx = collect_samples(root, class_map)
     random.shuffle(samples)
     n_total = len(samples)
     n_train = int(n_total * ratios[0])

@@ -350,6 +350,10 @@ _C.X3D.DIM_C1 = 12
 # Whether to scale the width of Res2, default is false.
 _C.X3D.SCALE_RES2 = False
 
+# Spatial strides for stem and each residual stage (s1 through s5).
+# Default matches the original X3D: [2, 2, 2, 2, 2].
+_C.X3D.SPATIAL_STRIDES = [2, 2, 2, 2, 2]
+
 # Whether to use a BatchNorm (BN) layer before the classifier, default is false.
 _C.X3D.BN_LIN5 = False
 

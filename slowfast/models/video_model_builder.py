@@ -684,6 +684,9 @@ class X3D(nn.Module):
         self.enable_detection = cfg.DETECTION.ENABLE
         self.num_pathways = 1
 
+        assert len(cfg.X3D.SPATIAL_STRIDES) == 5, "X3D.SPATIAL_STRIDES must have 5 ints"
+        self.spatial_strides = cfg.X3D.SPATIAL_STRIDES
+
         exp_stage = 2.0
         self.dim_c1 = cfg.X3D.DIM_C1
 
@@ -698,10 +701,10 @@ class X3D(nn.Module):
 
         self.block_basis = [
             # blocks, c, stride
-            [1, self.dim_res2, 2],
-            [2, self.dim_res3, 2],
-            [5, self.dim_res4, 2],
-            [3, self.dim_res5, 2],
+            [1, self.dim_res2, self.spatial_strides[1]],
+            [2, self.dim_res3, self.spatial_strides[2]],
+            [5, self.dim_res4, self.spatial_strides[3]],
+            [3, self.dim_res5, self.spatial_strides[4]],
         ]
         self._construct_network(cfg)
         init_helper.init_weights(
@@ -742,7 +745,7 @@ class X3D(nn.Module):
             dim_in=cfg.DATA.INPUT_CHANNEL_NUM,
             dim_out=[dim_res1],
             kernel=[temp_kernel[0][0] + [3, 3]],
-            stride=[[1, 2, 2]],
+            stride=[[1, self.spatial_strides[0], self.spatial_strides[0]]],
             padding=[[temp_kernel[0][0][0] // 2, 1, 1]],
             norm_module=self.norm_module,
             stem_func_name="x3d_stem",
@@ -784,7 +787,10 @@ class X3D(nn.Module):
         if self.enable_detection:
             NotImplementedError
         else:
-            spat_sz = int(math.ceil(cfg.DATA.TRAIN_CROP_SIZE / 32.0))
+            spat_stride = 1
+            for s in self.spatial_strides:
+                spat_stride *= s
+            spat_sz = max(1, int(math.ceil(cfg.DATA.TRAIN_CROP_SIZE / float(spat_stride))))
             self.head = head_helper.X3DHead(
                 dim_in=dim_out,
                 dim_inner=dim_inner,
