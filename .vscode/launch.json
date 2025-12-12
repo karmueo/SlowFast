@@ -63,14 +63,14 @@
                 "--cfg",
                 "configs/Custom/X3D_M_custom.yaml",
                 "--checkpoint",
-                "output/custom_x3d_v4/checkpoints/checkpoint_epoch_00150.pyth",
+                "output/custom_x3d_v6_4cls/checkpoints/checkpoint_epoch_00120.pyth",
                 "--output",
-                "output/custom_x3d_v4/model.onnx",
+                "output/custom_x3d_v6_4cls/x3d_v6_4cls.onnx",
                 // "--export_softmax",
                 "--simplify",
                 "--test_frames",
                 "mmaction2/110_video_frames_200_test2/bird/Smart_Record_00049_20251113-032810_68600_1",
-                "--class_names", "鸟,无人机,夜间无人机"
+                "--class_names", "鸟,无人机,夜间无人机,飞机"
             ],
             "env": {
                 "PYTHONUNBUFFERED": "1"
