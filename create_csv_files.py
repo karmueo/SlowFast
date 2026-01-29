@@ -6,9 +6,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 # 默认参数，可通过命令行覆盖
-DEFAULT_ROOT = Path("./mmaction2/110_video_frames_2025_11_all_200").resolve()
 DEFAULT_SEED = 0
-DEFAULT_RATIOS = (9.0, 0.1, 0.0)  # train, val, test
 DEFAULT_SEPARATOR = " "  # 与 kinetics 解析的 PATH_LABEL_SEPARATOR 对齐
 
 
@@ -95,10 +93,10 @@ def write_txt(path: Path, rows: List[Tuple[str, int, int]], sep: str):
 
 def parse_args():
     ap = argparse.ArgumentParser("Generate train/val/test csv for frame directory dataset")
-    ap.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="Root dir containing class subdirs")
-    ap.add_argument("--train-ratio", type=float, default=DEFAULT_RATIOS[0], help="Train split ratio")
-    ap.add_argument("--val-ratio", type=float, default=DEFAULT_RATIOS[1], help="Validation split ratio")
-    ap.add_argument("--test-ratio", type=float, default=DEFAULT_RATIOS[2], help="Test split ratio; if 0, test=val copy")
+    ap.add_argument("--root", type=Path, required=True, help="Root dir containing class subdirs")
+    ap.add_argument("--train-ratio", type=float, required=True, help="Train split ratio")
+    ap.add_argument("--val-ratio", type=float, required=True, help="Validation split ratio")
+    ap.add_argument("--test-ratio", type=float, required=True, help="Test split ratio; if 0, test=val copy")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Random seed")
     ap.add_argument("--separator", type=str, default=DEFAULT_SEPARATOR, help="Field separator (must match PATH_LABEL_SEPARATOR)")
     ap.add_argument("--output-dir", type=Path, default=None, help="Where to write csv files (default: root)")
