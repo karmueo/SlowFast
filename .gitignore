@@ -220,3 +220,4 @@ output
 *.npy
 *.bin
 *.npz
+.vscode/settings.json

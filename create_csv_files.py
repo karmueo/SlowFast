@@ -94,9 +94,24 @@ def write_txt(path: Path, rows: List[Tuple[str, int, int]], sep: str):
 def parse_args():
     ap = argparse.ArgumentParser("Generate train/val/test csv for frame directory dataset")
     ap.add_argument("--root", type=Path, required=True, help="Root dir containing class subdirs")
-    ap.add_argument("--train-ratio", type=float, required=True, help="Train split ratio")
-    ap.add_argument("--val-ratio", type=float, required=True, help="Validation split ratio")
-    ap.add_argument("--test-ratio", type=float, required=True, help="Test split ratio; if 0, test=val copy")
+    ap.add_argument(
+        "--train-ratio",
+        type=float,
+        default=0.9,
+        help="Train split ratio",
+    )
+    ap.add_argument(
+        "--val-ratio",
+        type=float,
+        default=0.1,
+        help="Validation split ratio",
+    )
+    ap.add_argument(
+        "--test-ratio",
+        type=float,
+        default=0.0,
+        help="Test split ratio; if 0, test=val copy",
+    )
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Random seed")
     ap.add_argument("--separator", type=str, default=DEFAULT_SEPARATOR, help="Field separator (must match PATH_LABEL_SEPARATOR)")
     ap.add_argument("--output-dir", type=Path, default=None, help="Where to write csv files (default: root)")
