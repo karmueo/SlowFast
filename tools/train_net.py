@@ -73,7 +73,7 @@ def train_epoch(
     if cfg.MODEL.FROZEN_BN:
         misc.frozen_bn_stats(model)
     # Explicitly declare reduction to mean.
-    loss_fun = losses.get_loss_func(cfg.MODEL.LOSS_FUNC)(reduction="mean")
+    loss_fun = losses.build_loss_func_from_cfg(cfg, reduction="mean")
 
     for cur_iter, (inputs, labels, index, time, meta) in enumerate(train_loader):
         # Transfer the data to the current GPU device.

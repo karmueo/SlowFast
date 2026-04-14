@@ -4,7 +4,7 @@ import os
 import pickle
 import csv
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 
@@ -53,6 +53,32 @@ def read_csv_list(csv_path: Path, sep: str = " ") -> List[Tuple[str, Optional[in
     return rows
 
 
+def load_class_map(class_map_path: Path) -> List[str]:
+    """读取类别映射文件并按 id 返回类别名列表。
+
+    Args:
+        class_map_path (Path): 类别映射文件路径，格式为 `<id> <name>`。
+
+    Returns:
+        List[str]: 与类别 id 对齐的类别名列表。
+    """
+    id_to_name: Dict[int, str] = {}  # 中文注释：类别编号到类别名的映射表。
+    with open(class_map_path, "r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()  # 中文注释：去掉空白后的当前文本行。
+            if not stripped:
+                continue
+            class_id_text, class_name = stripped.split(maxsplit=1)  # 中文注释：映射文件中的类别编号和类别名。
+            id_to_name[int(class_id_text)] = class_name
+    if not id_to_name:
+        raise SystemExit(f"类别映射为空: {class_map_path}")
+    max_class_id = max(id_to_name)  # 中文注释：类别编号中的最大值。
+    label_names = ["" for _ in range(max_class_id + 1)]  # 中文注释：与类别编号对齐的类别名列表。
+    for class_id, class_name in id_to_name.items():
+        label_names[class_id] = class_name
+    return label_names
+
+
 def build_label_map_from_root(root: Path) -> List[str]:
     # 与 create_csv_files.py 的规则一致：按类别目录名排序
     class_dirs = [p for p in root.iterdir() if p.is_dir()]
@@ -70,6 +96,7 @@ def main():
     ap.add_argument("--results", type=Path, required=True, help="Path to test_results.pkl saved by TEST.SAVE_RESULTS_PATH")
     ap.add_argument("--data_dir", type=Path, required=True, help="DATA.PATH_TO_DATA_DIR (contains test.csv)")
     ap.add_argument("--path_prefix", type=Path, required=True, help="DATA.PATH_PREFIX (root of frame dirs)")
+    ap.add_argument("--class_map", type=Path, default=None, help="可选，显式类别映射文件，推荐传 splits 目录中的 class_map.txt")
     ap.add_argument("--csv_name", type=str, default="test.csv", help="CSV filename, default: test.csv")
     ap.add_argument("--sep", type=str, default=" ", help="CSV field separator, default: space")
     ap.add_argument("--topk", type=int, default=5, help="Show top-k predictions for each mistake")
@@ -96,7 +123,10 @@ def main():
     # 尝试还原 label -> name
     label_names = None
     try:
-        label_names = build_label_map_from_root(args.path_prefix)
+        if args.class_map is not None:
+            label_names = load_class_map(args.class_map)
+        else:
+            label_names = build_label_map_from_root(args.path_prefix)
     except Exception:
         label_names = None
 

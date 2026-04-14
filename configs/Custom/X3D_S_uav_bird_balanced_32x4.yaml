@@ -1,0 +1,67 @@
+TRAIN:
+  ENABLE: True
+  DATASET: kinetics
+  BATCH_SIZE: 16
+  EVAL_PERIOD: 5
+  CHECKPOINT_PERIOD: 10
+  AUTO_RESUME: False
+  CHECKPOINT_FILE_PATH: /home/tl/data/weights/SlowFast/x3d_s.pyth
+  CHECKPOINT_TYPE: pytorch
+  CHECKPOINT_EPOCH_RESET: True
+  MIXED_PRECISION: True
+DATA:
+  PATH_TO_DATA_DIR: /home/tl/data/datasets/mmaction2/110_video_frames_2025_2026_3classes_all_200_have_json/splits/uav_bird_binary_tracksplit_v1
+  PATH_PREFIX: /home/tl/data/datasets/mmaction2/110_video_frames_2025_2026_3classes_all_200_have_json
+  PATH_LABEL_SEPARATOR: " "
+  NUM_FRAMES: 32
+  SAMPLING_RATE: 4
+  TRAIN_JITTER_SCALES: [64, 80]
+  TRAIN_CROP_SIZE: 64
+  TEST_CROP_SIZE: 64
+  INPUT_CHANNEL_NUM: [3]
+  DECODING_BACKEND: torchvision
+RESNET:
+  ZERO_INIT_FINAL_BN: True
+  TRANS_FUNC: x3d_transform
+  STRIDE_1X1: False
+BN:
+  USE_PRECISE_STATS: True
+  NUM_BATCHES_PRECISE: 100
+  WEIGHT_DECAY: 0.0
+MODEL:
+  MODEL_NAME: X3D
+  NUM_CLASSES: 2
+  ARCH: x3d
+  LOSS_FUNC: cross_entropy
+  CLASS_WEIGHTS: [2.27, 1.0]
+  DROPOUT_RATE: 0.5
+X3D:
+  WIDTH_FACTOR: 2.0
+  DEPTH_FACTOR: 2.2
+  BOTTLENECK_FACTOR: 2.25
+  DIM_C5: 2048
+  DIM_C1: 12
+SOLVER:
+  BASE_LR: 0.01
+  BASE_LR_SCALE_NUM_SHARDS: True
+  LR_POLICY: cosine
+  MAX_EPOCH: 80
+  WEIGHT_DECAY: 5e-5
+  WARMUP_EPOCHS: 5.0
+  WARMUP_START_LR: 0.001
+  OPTIMIZING_METHOD: sgd
+TEST:
+  ENABLE: True
+  DATASET: kinetics
+  BATCH_SIZE: 8
+  NUM_ENSEMBLE_VIEWS: 1
+  NUM_SPATIAL_CROPS: 1
+  SAVE_RESULTS_PATH: test_results.pkl
+DATA_LOADER:
+  NUM_WORKERS: 8
+  PIN_MEMORY: True
+  USE_WEIGHTED_SAMPLER: True
+  WEIGHTED_SAMPLER_MODE: class_balance
+NUM_GPUS: 1
+RNG_SEED: 0
+OUTPUT_DIR: ./output/x3d_s_uav_bird_v6_balanced_32x4

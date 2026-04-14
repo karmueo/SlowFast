@@ -12,6 +12,7 @@ import torch
 
 from slowfast.utils.env import pathmgr
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data.sampler import WeightedRandomSampler
 
 from torchvision import transforms
 
@@ -341,9 +342,62 @@ def create_sampler(dataset, shuffle, cfg):
     Returns:
         sampler (Sampler): the created sampler.
     """
-    sampler = DistributedSampler(dataset) if cfg.NUM_GPUS > 1 else None
+    if (
+        shuffle
+        and cfg.DATA_LOADER.USE_WEIGHTED_SAMPLER
+        and cfg.DATA_LOADER.WEIGHTED_SAMPLER_MODE == "class_balance"
+    ):
+        if cfg.NUM_GPUS > 1:
+            raise NotImplementedError(
+                "当前仅支持单卡使用 weighted sampler。"
+            )
+        labels = _extract_dataset_labels(dataset)  # 中文注释：从数据集中提取整数标签。
+        sampler = _build_class_balance_sampler(labels)  # 中文注释：按类别频次构建的加权采样器。
+    else:
+        sampler = DistributedSampler(dataset) if cfg.NUM_GPUS > 1 else None
 
     return sampler
+
+
+def _extract_dataset_labels(dataset):
+    """从数据集中提取标签列表。
+
+    Args:
+        dataset (torch.utils.data.Dataset): 训练数据集对象。
+
+    Returns:
+        np.ndarray: 样本标签数组。
+    """
+    if hasattr(dataset, "_labels"):
+        labels = np.asarray(dataset._labels, dtype=np.int64)  # 中文注释：Kinetics 风格数据集内部保存的标签列表。
+    elif hasattr(dataset, "labels"):
+        labels = np.asarray(dataset.labels, dtype=np.int64)  # 中文注释：兜底使用公开 labels 属性。
+    else:
+        raise AttributeError("数据集未暴露可用于 weighted sampler 的标签属性。")
+    if labels.ndim != 1:
+        raise ValueError(f"weighted sampler 仅支持一维标签，收到形状: {labels.shape}")
+    return labels
+
+
+def _build_class_balance_sampler(labels):
+    """构建按类别频次反比加权的采样器。
+
+    Args:
+        labels (np.ndarray): 一维整数标签数组。
+
+    Returns:
+        WeightedRandomSampler: 可直接传给 DataLoader 的采样器。
+    """
+    class_counts = np.bincount(labels)  # 中文注释：每个类别的样本数量统计。
+    if np.any(class_counts == 0):
+        raise ValueError(f"存在空类别，无法构建 weighted sampler: {class_counts}")
+    sample_weights = 1.0 / class_counts[labels]  # 中文注释：每个样本对应的反频次权重。
+    weight_tensor = torch.as_tensor(sample_weights, dtype=torch.double)  # 中文注释：WeightedRandomSampler 需要的权重张量。
+    return WeightedRandomSampler(
+        weights=weight_tensor,
+        num_samples=len(weight_tensor),
+        replacement=True,
+    )
 
 
 def loader_worker_init_fn(dataset):

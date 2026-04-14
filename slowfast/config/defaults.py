@@ -405,6 +405,9 @@ _C.MODEL.NUM_CLASSES = 400
 # Loss function.
 _C.MODEL.LOSS_FUNC = "cross_entropy"
 
+# Optional class weights for single-label classification losses.
+_C.MODEL.CLASS_WEIGHTS = []
+
 # Model architectures that has one single pathway.
 _C.MODEL.SINGLE_PATHWAY_ARCH = [
     "2d",
@@ -943,6 +946,12 @@ _C.DATA_LOADER.PIN_MEMORY = True
 
 # Enable multi thread decoding.
 _C.DATA_LOADER.ENABLE_MULTI_THREAD_DECODE = False
+
+# If True, use weighted random sampling for the train split.
+_C.DATA_LOADER.USE_WEIGHTED_SAMPLER = False
+
+# Weight construction mode for weighted random sampling.
+_C.DATA_LOADER.WEIGHTED_SAMPLER_MODE = "class_balance"
 
 
 # ---------------------------------------------------------------------------- #

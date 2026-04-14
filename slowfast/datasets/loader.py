@@ -13,7 +13,7 @@ import torch
 from slowfast.datasets.multigrid_helper import ShortCycleBatchSampler
 from torch.utils.data._utils.collate import default_collate
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data.sampler import RandomSampler, Sampler
+from torch.utils.data.sampler import RandomSampler, Sampler, WeightedRandomSampler
 
 from . import utils as utils
 from .build import build_dataset
@@ -194,7 +194,7 @@ def shuffle_dataset(loader, cur_epoch):
             else loader.sampler
         )
     assert isinstance(
-        sampler, (RandomSampler, DistributedSampler)
+        sampler, (RandomSampler, DistributedSampler, WeightedRandomSampler)
     ), "Sampler type '{}' not supported".format(type(sampler))
     # RandomSampler handles shuffling automatically
     if isinstance(sampler, DistributedSampler):

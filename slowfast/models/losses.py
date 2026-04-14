@@ -79,3 +79,31 @@ def get_loss_func(loss_name):
     if loss_name not in _LOSSES.keys():
         raise NotImplementedError("Loss {} is not supported".format(loss_name))
     return _LOSSES[loss_name]
+
+
+def build_loss_func_from_cfg(cfg, reduction="mean"):
+    """根据配置构建损失函数。
+
+    Args:
+        cfg (CfgNode): 训练配置对象。
+        reduction (str): 损失归约方式。
+
+    Returns:
+        nn.Module: 已实例化的损失函数。
+    """
+    loss_name = cfg.MODEL.LOSS_FUNC  # 中文注释：当前配置指定的损失名称。
+    loss_builder = get_loss_func(loss_name)  # 中文注释：损失函数构造器。
+    if loss_name != "cross_entropy" or not cfg.MODEL.CLASS_WEIGHTS:
+        return loss_builder(reduction=reduction)
+
+    class_weights = torch.tensor(  # 中文注释：按类别顺序排列的权重张量。
+        cfg.MODEL.CLASS_WEIGHTS, dtype=torch.float32
+    )
+    if int(class_weights.numel()) != int(cfg.MODEL.NUM_CLASSES):
+        raise ValueError(
+            "MODEL.CLASS_WEIGHTS 长度必须与 MODEL.NUM_CLASSES 一致: "
+            f"{class_weights.numel()} vs {cfg.MODEL.NUM_CLASSES}"
+        )
+    if cfg.NUM_GPUS:
+        class_weights = class_weights.cuda()
+    return loss_builder(weight=class_weights, reduction=reduction)
